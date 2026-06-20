@@ -53,6 +53,21 @@
             display: none !important;
         }
 
+        /* Iframe-only mode: remove border-radius & overflow so iframe fills container cleanly */
+        .player-container.iframe-mode {
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        /* Ensure the iframe itself never shows scrollbars */
+        #contentArea iframe {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border: none;
+            overflow: hidden;
+        }
+
         /* Animation for loading */
         .loader {
             border: 4px solid #1e293b;
@@ -63,26 +78,6 @@
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* Embed Mode Styles */
-        body.is-embedded nav, 
-        body.is-embedded footer, 
-        body.is-embedded #statusBar {
-            display: none !important;
-        }
-
-        body.is-embedded main {
-            padding: 0 !important;
-            max-width: 100% !important;
-        }
-
-        body.is-embedded .player-container {
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            aspect-ratio: auto !important;
-            height: 100vh !important;
-            width: 100vw !important;
-        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -95,13 +90,8 @@
             </a>
             <h1 class="text-xl font-extrabold text-amber-500 tracking-tight">Friho<span class="text-white">Live</span></h1>
         </div>
-        <div class="flex items-center gap-3">
-            <div id="streamTitle" class="hidden lg:block text-sm font-semibold text-slate-300 truncate max-w-xs">
-                بث مباشر
-            </div>
-            <button id="shareBtn" class="bg-amber-500 hover:bg-amber-600 text-slate-900 px-3 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
-                <i class="fas fa-share-alt"></i> <span class="hidden sm:inline">مشاركة</span>
-            </button>
+        <div id="streamTitle" class="hidden md:block text-sm font-semibold text-slate-300 truncate max-w-xs">
+            بث مباشر
         </div>
     </nav>
 
@@ -111,7 +101,7 @@
         <!-- Player Area -->
         <div class="player-container" id="playerWrapper">
             <!-- Loading Overlay -->
-            <div id="loadingOverlay" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 transition-opacity duration-300 hidden-element">
+            <div id="loadingOverlay" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 transition-opacity duration-300">
                 <div class="loader mb-4"></div>
                 <p class="text-slate-400 text-sm font-medium">جاري تهيئة البث...</p>
             </div>
@@ -138,38 +128,6 @@
     <footer class="text-center py-6 text-slate-500 text-xs border-t border-slate-800">
         © 2026 Friho Live - جميع الحقوق محفوظة
     </footer>
-
-    <!-- Share Modal -->
-    <div id="shareModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-        <div class="glass-effect w-full max-w-md p-6 rounded-2xl shadow-2xl border border-slate-700">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold text-white">مشاركة البث</h3>
-                <button id="closeModal" class="text-slate-400 hover:text-white transition-colors">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
-            </div>
-            
-            <div class="space-y-6">
-                <!-- Link Share -->
-                <div>
-                    <label class="block text-sm font-medium text-slate-400 mb-2">رابط المشاركة</label>
-                    <div class="flex gap-2">
-                        <input id="shareLink" type="text" readonly class="flex-grow bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none">
-                        <button id="copyLink" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold transition-all">نسخ</button>
-                    </div>
-                </div>
-                
-                <!-- Iframe Share -->
-                <div>
-                    <label class="block text-sm font-medium text-slate-400 mb-2">كود التضمين (Iframe)</label>
-                    <div class="flex gap-2">
-                        <textarea id="shareIframe" readonly rows="3" class="flex-grow bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none resize-none font-mono"></textarea>
-                        <button id="copyIframe" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold transition-all">نسخ</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <script>
         let currentUrl = '';
@@ -211,11 +169,29 @@
             loadSource(url);
         }
 
-        function loadSource(url) {
+        function destroyPlayer() {
+            // 1. Destroy Plyr instance completely
+            if (plyrInstance) {
+                try { plyrInstance.destroy(); } catch(e) {}
+                plyrInstance = null;
+            }
+            // 2. Destroy HLS instance completely
+            if (hlsInstance) {
+                try { hlsInstance.destroy(); } catch(e) {}
+                hlsInstance = null;
+            }
+            // 3. Wipe all child nodes from contentArea
             contentArea.innerHTML = '';
+        }
+
+        function loadSource(url) {
+            destroyPlayer();
             noSrcOverlay.classList.add('hidden-element');
             loadingOverlay.classList.remove('hidden-element');
             setStatus('جاري تحليل الرابط والتشغيل...', 'loading');
+
+            // Remove iframe-mode class first; setupIframe will add it back if needed
+            document.getElementById('playerWrapper').classList.remove('iframe-mode');
 
             const type = detectLinkType(url);
 
@@ -233,6 +209,9 @@
         }
 
         function setupHLS(url, fallback = null) {
+            // Clean up any previous player before creating a new video element
+            destroyPlayer();
+
             const video = document.createElement('video');
             video.id = 'mainVideo';
             video.controls = true;
@@ -280,6 +259,7 @@
         }
 
         function setupNative(url) {
+            destroyPlayer();
             const video = document.createElement('video');
             video.src = url;
             video.controls = true;
@@ -295,10 +275,32 @@
         }
 
         function setupIframe(url) {
+            // Make sure no Plyr/HLS remnants exist before creating the iframe
+            destroyPlayer();
+
+            // Switch container to iframe mode (no overflow issues, clean corners)
+            const playerWrapper = document.getElementById('playerWrapper');
+            playerWrapper.classList.add('iframe-mode');
+
             const iframe = document.createElement('iframe');
             iframe.src = url;
-            iframe.allow = "autoplay; fullscreen; encrypted-media";
+            iframe.allow = "autoplay; fullscreen; picture-in-picture; encrypted-media";
             iframe.setAttribute('allowfullscreen', 'true');
+            iframe.setAttribute('webkitallowfullscreen', 'true');
+            iframe.setAttribute('mozallowfullscreen', 'true');
+            iframe.setAttribute('scrolling', 'no');
+            iframe.style.cssText = [
+                'position:absolute',
+                'inset:0',
+                'width:100%',
+                'height:100%',
+                'border:none',
+                'overflow:hidden',
+                'background:#000'
+            ].join(';');
+
+            // contentArea already cleared by destroyPlayer(); just append
+            contentArea.style.position = 'relative';
             contentArea.appendChild(iframe);
 
             setTimeout(() => {
@@ -321,11 +323,6 @@
         }
 
         window.onload = () => {
-            // Detect if page is loaded in an iframe
-            if (window.self !== window.top) {
-                document.body.classList.add('is-embedded');
-            }
-
             const params = new URLSearchParams(window.location.search);
             const url = params.get('url') || params.get('stream');
             const title = params.get('title');
@@ -338,50 +335,6 @@
                 loadSource(decodedUrl);
             }
         };
-
-        // Share Functionality
-        const shareBtn = document.getElementById('shareBtn');
-        const shareModal = document.getElementById('shareModal');
-        const closeModal = document.getElementById('closeModal');
-        const shareLinkInput = document.getElementById('shareLink');
-        const shareIframeInput = document.getElementById('shareIframe');
-        const copyLinkBtn = document.getElementById('copyLink');
-        const copyIframeBtn = document.getElementById('copyIframe');
-
-        shareBtn.onclick = () => {
-            const currentUrl = window.location.href;
-            shareLinkInput.value = currentUrl;
-            shareIframeInput.value = `<iframe src="${currentUrl}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
-            shareModal.classList.remove('hidden');
-        };
-
-        closeModal.onclick = () => {
-            shareModal.classList.add('hidden');
-        };
-
-        window.onclick = (event) => {
-            if (event.target == shareModal) {
-                shareModal.classList.add('hidden');
-            }
-        };
-
-        async function copyToClipboard(element, button) {
-            try {
-                await navigator.clipboard.writeText(element.value);
-                const originalText = button.innerText;
-                button.innerText = 'تم!';
-                button.classList.replace('bg-slate-700', 'bg-green-600');
-                setTimeout(() => {
-                    button.innerText = originalText;
-                    button.classList.replace('bg-green-600', 'bg-slate-700');
-                }, 2000);
-            } catch (err) {
-                alert('فشل نسخ النص');
-            }
-        }
-
-        copyLinkBtn.onclick = () => copyToClipboard(shareLinkInput, copyLinkBtn);
-        copyIframeBtn.onclick = () => copyToClipboard(shareIframeInput, copyIframeBtn);
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0e6d9cc5edae218',t:'MTc4MTkxNzM3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0e72b2b1e13cc66',t:'MTc4MTkyMDcwOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0e6d9cc5edae218',t:'MTc4MTkxNzM3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
