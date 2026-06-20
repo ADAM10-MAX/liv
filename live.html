@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+    <meta name="referrer" content="no-referrer">
+    <title>Friho Live - البث المباشر</title>
+    
+    <!-- Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+
+        .player-container {
+            aspect-ratio: 16 / 9;
+            background: #000;
+            position: relative;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        iframe, video {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .glass-effect {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Plyr Customization */
+        :root {
+            --plyr-color-main: #f59e0b;
+        }
+
+        .hidden-element {
+            display: none !important;
+        }
+
+        /* Animation for loading */
+        .loader {
+            border: 4px solid #1e293b;
+            border-top: 4px solid #f59e0b;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="glass-effect sticky top-0 z-50 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <a href="matches.html" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                <i class="fas fa-arrow-right"></i> المباريات
+            </a>
+            <h1 class="text-xl font-extrabold text-amber-500 tracking-tight">Friho<span class="text-white">Live</span></h1>
+        </div>
+        <div id="streamTitle" class="hidden md:block text-sm font-semibold text-slate-300 truncate max-w-xs">
+            بث مباشر
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
+        
+        <!-- Player Area -->
+        <div class="player-container" id="playerWrapper">
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 transition-opacity duration-300">
+                <div class="loader mb-4"></div>
+                <p class="text-slate-400 text-sm font-medium">جاري تهيئة البث...</p>
+            </div>
+
+            <!-- No Source Overlay -->
+            <div id="noSrcOverlay" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950 text-center px-6">
+                <div class="text-amber-500 text-6xl mb-4"><i class="fas fa-tv"></i></div>
+                <h2 class="text-xl font-bold mb-2">لا يوجد بث حالياً</h2>
+                <p class="text-slate-400 mb-6 text-sm">يرجى إدخال رابط صالح في الأعلى أو اختيار مباراة</p>
+                <a href="matches.html" class="bg-amber-500 text-slate-900 px-6 py-2 rounded-lg font-bold hover:bg-amber-600 transition-all">انتقل للمباريات</a>
+            </div>
+
+            <!-- Dynamic Content Container -->
+            <div id="contentArea" class="w-full h-full"></div>
+        </div>
+
+        <!-- Status Bar -->
+        <div id="statusBar" class="mt-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700 text-center text-xs font-medium text-slate-400 flex items-center justify-center gap-2">
+            <i class="fas fa-info-circle"></i> جاهز لاستقبال الروابط
+        </div>
+
+    </main>
+
+    <footer class="text-center py-6 text-slate-500 text-xs border-t border-slate-800">
+        © 2026 Friho Live - جميع الحقوق محفوظة
+    </footer>
+
+    <script>
+        let currentUrl = '';
+        let plyrInstance = null;
+        let hlsInstance = null;
+
+        const contentArea = document.getElementById('contentArea');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const noSrcOverlay = document.getElementById('noSrcOverlay');
+        const statusBar = document.getElementById('statusBar');
+        const streamTitle = document.getElementById('streamTitle');
+
+        function setStatus(text, type = 'info') {
+            const colors = {
+                info: 'text-slate-400',
+                success: 'text-green-400',
+                error: 'text-red-400',
+                loading: 'text-amber-400'
+            };
+            statusBar.className = `mt-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700 text-center text-xs font-medium flex items-center justify-center gap-2 ${colors[type]}`;
+            statusBar.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}"></i> ${text}`;
+        }
+
+        function detectLinkType(url) {
+            const u = url.toLowerCase();
+            if (u.includes('.m3u8') || u.includes('/m3u8') || u.includes(':8080')) return 'stream';
+            if (u.includes('.mp4') || u.includes('.mov')) return 'native';
+            if (u.includes('iframe') || u.includes('embed') || u.includes('player')) return 'iframe';
+            return 'auto'; 
+        }
+
+        async function handleLoad() {
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('الرجاء إدخال رابط أولاً');
+                return;
+            }
+            currentUrl = url;
+            loadSource(url);
+        }
+
+        function loadSource(url) {
+            contentArea.innerHTML = '';
+            noSrcOverlay.classList.add('hidden-element');
+            loadingOverlay.classList.remove('hidden-element');
+            setStatus('جاري تحليل الرابط والتشغيل...', 'loading');
+
+            const type = detectLinkType(url);
+
+            if (type === 'stream') {
+                setupHLS(url);
+            } else if (type === 'native') {
+                setupNative(url);
+            } else if (type === 'iframe') {
+                setupIframe(url);
+            } else {
+                setupHLS(url, () => {
+                    setupIframe(url);
+                });
+            }
+        }
+
+        function setupHLS(url, fallback = null) {
+            const video = document.createElement('video');
+            video.id = 'mainVideo';
+            video.controls = true;
+            video.autoplay = true;
+            video.muted = true;
+            video.setAttribute('playsinline', '');
+            contentArea.appendChild(video);
+
+            if (Hls.isSupported()) {
+                hlsInstance = new Hls();
+                hlsInstance.loadSource(url);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    loadingOverlay.classList.add('hidden-element');
+                    setStatus('البث يعمل الآن عبر HLS', 'success');
+                    video.play();
+                });
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        if (fallback) {
+                            fallback();
+                        } else {
+                            showError('فشل تشغيل البث كمصدر فيديو، جاري المحاولة كصفحة...');
+                            setupIframe(url);
+                        }
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', () => {
+                    loadingOverlay.classList.add('hidden-element');
+                    setStatus('البث يعمل الآن (Native HLS)', 'success');
+                    video.play();
+                });
+            } else {
+                if (fallback) fallback();
+                else setupIframe(url);
+            }
+
+            plyrInstance = new Plyr(video, {
+                autoplay: true,
+                muted: true,
+                fullscreen: { enabled: true, name: 'fullscreen', fallback: true }
+            });
+        }
+
+        function setupNative(url) {
+            const video = document.createElement('video');
+            video.src = url;
+            video.controls = true;
+            video.autoplay = true;
+            contentArea.appendChild(video);
+            
+            video.oncanplay = () => {
+                loadingOverlay.classList.add('hidden-element');
+                setStatus('تم تحميل الفيديو بنجاح', 'success');
+            };
+
+            plyrInstance = new Plyr(video);
+        }
+
+        function setupIframe(url) {
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.allow = "autoplay; fullscreen; encrypted-media";
+            iframe.setAttribute('allowfullscreen', 'true');
+            contentArea.appendChild(iframe);
+
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden-element');
+                setStatus('تم عرض الرابط في إطار خارجي (Iframe)', 'success');
+            }, 2000);
+        }
+
+        function showError(msg) {
+            setStatus(msg, 'error');
+        }
+
+        function openInVLC() {
+            if (!currentUrl) {
+                alert('يرجى تشغيل رابط أولاً ليتم تحويله إلى VLC');
+                return;
+            }
+            window.location.href = `vlc://${currentUrl}`;
+            setStatus('محاولة فتح الرابط في VLC...', 'info');
+        }
+
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            const url = params.get('url') || params.get('stream');
+            const title = params.get('title');
+
+            if (title) streamTitle.innerText = decodeURIComponent(title);
+
+            if (url) {
+                const decodedUrl = decodeURIComponent(url);
+                currentUrl = decodedUrl;
+                loadSource(decodedUrl);
+            }
+        };
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0e6d9cc5edae218',t:'MTc4MTkxNzM3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
