@@ -6,6 +6,12 @@
     <title>Friho Live - المباريات</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+      <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.min.js"></script>
+
     <style>
         .match-card {
             transition: transform 0.2s, box-shadow 0.2s;
@@ -33,12 +39,13 @@
             <span id="live-count" class="bg-red-600 text-white text-sm px-3 py-1 rounded-full font-bold hidden">
                 <span class="live-dot">●</span> <span id="count-number">0</span>
             </span>
-        </div>
-           <div class="flex items-center gap-4">
+               <div class="flex items-center gap-4">
             <a href="matches.html" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
-                <i class="fas fa-arrow-right"></i> المباريات
+               <i class="fa-solid fa-house"></i> المباريات
             </a>
                <p><br /></p><p><br /></p>
+        </div>
+        
         <div id="matches-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div class="col-span-full text-center py-12">
                 <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-400 border-t-transparent mb-4"></div>
