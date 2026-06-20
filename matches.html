@@ -3,137 +3,385 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Friho Live - المباريات</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+    <meta name="referrer" content="no-referrer">
+    <title>Friho Live - البث المباشر</title>
+    
+    <!-- Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.min.js"></script>
+
     <style>
-        .match-card {
-            transition: transform 0.2s, box-shadow 0.2s;
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
         }
-        .match-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+
+        .player-container {
+            aspect-ratio: 16 / 9;
+            background: #000;
+            position: relative;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
-        .live-dot {
-            animation: pulse 1.5s infinite;
+
+        iframe, video {
+            width: 100%;
+            height: 100%;
+            border: none;
         }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+
+        .glass-effect {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Plyr Customization */
+        :root {
+            --plyr-color-main: #f59e0b;
+        }
+
+        .hidden-element {
+            display: none !important;
+        }
+
+        /* Animation for loading */
+        .loader {
+            border: 4px solid #1e293b;
+            border-top: 4px solid #f59e0b;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Embed Mode Styles */
+        body.is-embedded nav, 
+        body.is-embedded footer, 
+        body.is-embedded #statusBar {
+            display: none !important;
+        }
+
+        body.is-embedded main {
+            padding: 0 !important;
+            max-width: 100% !important;
+        }
+
+        body.is-embedded .player-container {
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            aspect-ratio: auto !important;
+            height: 100vh !important;
+            width: 100vw !important;
         }
     </style>
 </head>
-<body class="bg-slate-950 text-white min-h-screen">
-    <div class="max-w-4xl mx-auto p-4 md:p-6">
-        <div class="flex items-center justify-between mb-8">
-            <h1 class="text-2xl md:text-3xl font-bold">
-                <span class="text-amber-400">⚽ المباريات</span>
-                <span class="text-sm text-slate-400 font-normal mr-2">مباشر</span>
-            </h1>
-            <span id="live-count" class="bg-red-600 text-white text-sm px-3 py-1 rounded-full font-bold hidden">
-                <span class="live-dot">●</span> <span id="count-number">0</span>
-            </span>
-        </div>
-       <nav>
-           <div class="flex items-center gap-4">
-            <a href="index.html" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
-                <i class="fa-regular fa-house"></i>home
+<body class="min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="glass-effect sticky top-0 z-50 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <a href="matches.html" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                <i class="fas fa-arrow-right"></i> المباريات
             </a>
             <h1 class="text-xl font-extrabold text-amber-500 tracking-tight">Friho<span class="text-white">Live</span></h1>
         </div>
-       </nav>
-        <p><br /></p><p><br /></p>
-        <div id="matches-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="col-span-full text-center py-12">
-                <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-400 border-t-transparent mb-4"></div>
-                <p class="text-slate-400">جاري تحميل المباريات...</p>
+        <div class="flex items-center gap-3">
+            <div id="streamTitle" class="hidden lg:block text-sm font-semibold text-slate-300 truncate max-w-xs">
+                بث مباشر
             </div>
+            <button id="shareBtn" class="bg-amber-500 hover:bg-amber-600 text-slate-900 px-3 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2">
+                <i class="fas fa-share-alt"></i> <span class="hidden sm:inline">مشاركة</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-6 max-w-5xl">
+        
+        <!-- Player Area -->
+        <div class="player-container" id="playerWrapper">
+            <!-- Loading Overlay -->
+            <div id="loadingOverlay" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950 transition-opacity duration-300">
+                <div class="loader mb-4"></div>
+                <p class="text-slate-400 text-sm font-medium">جاري تهيئة البث...</p>
+            </div>
+
+            <!-- No Source Overlay -->
+            <div id="noSrcOverlay" class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950 text-center px-6">
+                <div class="text-amber-500 text-6xl mb-4"><i class="fas fa-tv"></i></div>
+                <h2 class="text-xl font-bold mb-2">لا يوجد بث حالياً</h2>
+                <p class="text-slate-400 mb-6 text-sm">يرجى إدخال رابط صالح في الأعلى أو اختيار مباراة</p>
+                <a href="matches.html" class="bg-amber-500 text-slate-900 px-6 py-2 rounded-lg font-bold hover:bg-amber-600 transition-all">انتقل للمباريات</a>
+            </div>
+
+            <!-- Dynamic Content Container -->
+            <div id="contentArea" class="w-full h-full"></div>
         </div>
 
-        <div class="mt-10 text-center text-slate-600 text-sm border-t border-slate-800 pt-6">
-            <p>© 2026 Friho Live - جميع الحقوق محفوظة</p>
+        <!-- Status Bar -->
+        <div id="statusBar" class="mt-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700 text-center text-xs font-medium text-slate-400 flex items-center justify-center gap-2">
+            <i class="fas fa-info-circle"></i> جاهز لاستقبال الروابط
+        </div>
+
+    </main>
+
+    <footer class="text-center py-6 text-slate-500 text-xs border-t border-slate-800">
+        © 2026 Friho Live - جميع الحقوق محفوظة
+    </footer>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <div class="glass-effect w-full max-w-md p-6 rounded-2xl shadow-2xl border border-slate-700">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white">مشاركة البث</h3>
+                <button id="closeModal" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- Link Share -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-2">رابط المشاركة</label>
+                    <div class="flex gap-2">
+                        <input id="shareLink" type="text" readonly class="flex-grow bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none">
+                        <button id="copyLink" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold transition-all">نسخ</button>
+                    </div>
+                </div>
+                
+                <!-- Iframe Share -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-2">كود التضمين (Iframe)</label>
+                    <div class="flex gap-2">
+                        <textarea id="shareIframe" readonly rows="3" class="flex-grow bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none resize-none font-mono"></textarea>
+                        <button id="copyIframe" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm font-bold transition-all">نسخ</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // ================== Supabase Config ==================
-        const SUPABASE_URL = 'https://vlwmzhdgfuqwcvyiiqhd.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZsd216aGRnZnVxd2N2eWlpcWhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MTY1MDYsImV4cCI6MjA5NTk5MjUwNn0.iFwK3TnZMzxe0pjz3m72gEozwO23s_yIZK2nmL0UHig';
+        let currentUrl = '';
+        let plyrInstance = null;
+        let hlsInstance = null;
 
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const contentArea = document.getElementById('contentArea');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const noSrcOverlay = document.getElementById('noSrcOverlay');
+        const statusBar = document.getElementById('statusBar');
+        const streamTitle = document.getElementById('streamTitle');
 
-        // ================== Load Matches ==================
-        async function loadMatches() {
-            const container = document.getElementById('matches-container');
+        function setStatus(text, type = 'info') {
+            const colors = {
+                info: 'text-slate-400',
+                success: 'text-green-400',
+                error: 'text-red-400',
+                loading: 'text-amber-400'
+            };
+            statusBar.className = `mt-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700 text-center text-xs font-medium flex items-center justify-center gap-2 ${colors[type]}`;
+            statusBar.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}"></i> ${text}`;
+        }
 
-            try {
-                // تم إزالة .order('created_at', ...) لتجنب الخطأ
-                const { data, error } = await sb
-                    .from('matches')
-                    .select('*');
+        function detectLinkType(url) {
+            const u = url.toLowerCase();
+            if (u.includes('.m3u8') || u.includes('/m3u8') || u.includes(':8080')) return 'stream';
+            if (u.includes('.mp4') || u.includes('.mov')) return 'native';
+            if (u.includes('iframe') || u.includes('embed') || u.includes('player')) return 'iframe';
+            return 'auto'; 
+        }
 
-                if (error) throw error;
+        async function handleLoad() {
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('الرجاء إدخال رابط أولاً');
+                return;
+            }
+            currentUrl = url;
+            loadSource(url);
+        }
 
-                if (!data || data.length === 0) {
-                    container.innerHTML = `
-                        <div class="col-span-full text-center py-16">
-                            <div class="text-6xl mb-4">📺</div>
-                            <p class="text-slate-400 text-lg">لا توجد مباريات متاحة حالياً</p>
-                        </div>
-                    `;
-                    return;
-                }
+        function loadSource(url) {
+            contentArea.innerHTML = '';
+            noSrcOverlay.classList.add('hidden-element');
+            loadingOverlay.classList.remove('hidden-element');
+            setStatus('جاري تحليل الرابط والتشغيل...', 'loading');
 
-                // Update live count
-                document.getElementById('live-count').classList.remove('hidden');
-                document.getElementById('count-number').textContent = data.length;
+            const type = detectLinkType(url);
 
-                // Render matches
-                container.innerHTML = data.map((m, index) => {
-                    const matchUrl = m.korazon_url || m.stream_url || m.url || '';
-                    const matchName = m.match_name || m.name || `مباراة ${index + 1}`;
-                    const matchTime = m.match_time || m.time || '';
-                    const matchLeague = m.league || m.category || '';
-                    const matchLogo = m.logo || m.team_logo || '';
-
-                    return `
-                        <div class="match-card bg-slate-800/80 backdrop-blur p-5 md:p-6 rounded-2xl border border-slate-700/50">
-                            <div class="flex items-start gap-4">
-                                ${matchLogo ? `<img src="${matchLogo}" alt="" class="w-12 h-12 rounded-full object-cover bg-slate-700" onerror="this.style.display='none'">` : ''}
-                                <div class="flex-1 min-w-0">
-                                    <h3 class="text-lg md:text-xl font-bold text-white truncate">${matchName}</h3>
-                                    ${matchLeague ? `<p class="text-sm text-amber-400/80 mt-1"><i class="inline-block w-4">🏆</i> ${matchLeague}</p>` : ''}
-                                    ${matchTime ? `<p class="text-xs text-slate-500 mt-1"><i class="inline-block w-4">🕒</i> ${matchTime}</p>` : ''}
-                                </div>
-                            </div>
-                            ${matchUrl ? `
-                                <a href="live.html?url=${encodeURIComponent(matchUrl)}&title=${encodeURIComponent(matchName)}"
-                                   class="w-full mt-5 flex items-center justify-center gap-2 bg-gradient-to-l from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-900 py-3 rounded-xl font-bold text-sm md:text-base transition-all duration-200">
-                                    مشاهدة البث المباشر
-                                </a>
-                            ` : `<div class="w-full mt-5 text-center py-3 bg-slate-700 rounded-xl text-slate-500">الرابط غير متاح</div>`}
-                        </div>
-                    `;
-                }).join('');
-
-            } catch (err) {
-                console.error('Error loading matches:', err);
-                container.innerHTML = `
-                    <div class="col-span-full text-center py-16">
-                        <p class="text-red-400">حدث خطأ في تحميل البيانات</p>
-                        <button onclick="location.reload()" class="mt-4 bg-amber-600 px-6 py-2 rounded-xl text-slate-900 font-bold">إعادة المحاولة</button>
-                    </div>
-                `;
+            if (type === 'stream') {
+                setupHLS(url);
+            } else if (type === 'native') {
+                setupNative(url);
+            } else if (type === 'iframe') {
+                setupIframe(url);
+            } else {
+                setupHLS(url, () => {
+                    setupIframe(url);
+                });
             }
         }
 
-        loadMatches();
-        setInterval(loadMatches, 60000);
+        function setupHLS(url, fallback = null) {
+            const video = document.createElement('video');
+            video.id = 'mainVideo';
+            video.controls = true;
+            video.autoplay = true;
+            video.muted = true;
+            video.setAttribute('playsinline', '');
+            contentArea.appendChild(video);
+
+            if (Hls.isSupported()) {
+                hlsInstance = new Hls();
+                hlsInstance.loadSource(url);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    loadingOverlay.classList.add('hidden-element');
+                    setStatus('البث يعمل الآن عبر HLS', 'success');
+                    video.play();
+                });
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        if (fallback) {
+                            fallback();
+                        } else {
+                            showError('فشل تشغيل البث كمصدر فيديو، جاري المحاولة كصفحة...');
+                            setupIframe(url);
+                        }
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', () => {
+                    loadingOverlay.classList.add('hidden-element');
+                    setStatus('البث يعمل الآن (Native HLS)', 'success');
+                    video.play();
+                });
+            } else {
+                if (fallback) fallback();
+                else setupIframe(url);
+            }
+
+            plyrInstance = new Plyr(video, {
+                autoplay: true,
+                muted: true,
+                fullscreen: { enabled: true, name: 'fullscreen', fallback: true }
+            });
+        }
+
+        function setupNative(url) {
+            const video = document.createElement('video');
+            video.src = url;
+            video.controls = true;
+            video.autoplay = true;
+            contentArea.appendChild(video);
+            
+            video.oncanplay = () => {
+                loadingOverlay.classList.add('hidden-element');
+                setStatus('تم تحميل الفيديو بنجاح', 'success');
+            };
+
+            plyrInstance = new Plyr(video);
+        }
+
+        function setupIframe(url) {
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.allow = "autoplay; fullscreen; encrypted-media";
+            iframe.setAttribute('allowfullscreen', 'true');
+            contentArea.appendChild(iframe);
+
+            setTimeout(() => {
+                loadingOverlay.classList.add('hidden-element');
+                setStatus('تم عرض الرابط في إطار خارجي (Iframe)', 'success');
+            }, 2000);
+        }
+
+        function showError(msg) {
+            setStatus(msg, 'error');
+        }
+
+        function openInVLC() {
+            if (!currentUrl) {
+                alert('يرجى تشغيل رابط أولاً ليتم تحويله إلى VLC');
+                return;
+            }
+            window.location.href = `vlc://${currentUrl}`;
+            setStatus('محاولة فتح الرابط في VLC...', 'info');
+        }
+
+        window.onload = () => {
+            // Detect if page is loaded in an iframe
+            if (window.self !== window.top) {
+                document.body.classList.add('is-embedded');
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const url = params.get('url') || params.get('stream');
+            const title = params.get('title');
+
+            if (title) streamTitle.innerText = decodeURIComponent(title);
+
+            if (url) {
+                const decodedUrl = decodeURIComponent(url);
+                currentUrl = decodedUrl;
+                loadSource(decodedUrl);
+            }
+        };
+
+        // Share Functionality
+        const shareBtn = document.getElementById('shareBtn');
+        const shareModal = document.getElementById('shareModal');
+        const closeModal = document.getElementById('closeModal');
+        const shareLinkInput = document.getElementById('shareLink');
+        const shareIframeInput = document.getElementById('shareIframe');
+        const copyLinkBtn = document.getElementById('copyLink');
+        const copyIframeBtn = document.getElementById('copyIframe');
+
+        shareBtn.onclick = () => {
+            const currentUrl = window.location.href;
+            shareLinkInput.value = currentUrl;
+            shareIframeInput.value = `<iframe src="${currentUrl}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
+            shareModal.classList.remove('hidden');
+        };
+
+        closeModal.onclick = () => {
+            shareModal.classList.add('hidden');
+        };
+
+        window.onclick = (event) => {
+            if (event.target == shareModal) {
+                shareModal.classList.add('hidden');
+            }
+        };
+
+        async function copyToClipboard(element, button) {
+            try {
+                await navigator.clipboard.writeText(element.value);
+                const originalText = button.innerText;
+                button.innerText = 'تم!';
+                button.classList.replace('bg-slate-700', 'bg-green-600');
+                setTimeout(() => {
+                    button.innerText = originalText;
+                    button.classList.replace('bg-green-600', 'bg-slate-700');
+                }, 2000);
+            } catch (err) {
+                alert('فشل نسخ النص');
+            }
+        }
+
+        copyLinkBtn.onclick = () => copyToClipboard(shareLinkInput, copyLinkBtn);
+        copyIframeBtn.onclick = () => copyToClipboard(shareIframeInput, copyIframeBtn);
     </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0e6d9cc5edae218',t:'MTc4MTkxNzM3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a0e71bc06db7a8f0',t:'MTc4MTkyMDA3Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
